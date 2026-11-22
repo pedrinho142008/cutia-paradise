@@ -167,16 +167,23 @@
     async removerItem(itemId) {
       const { db } = await contexto();
 
-      return executar(
+      const removidos = await executar(
         db.from('order_items')
           .delete()
           .eq('id', itemId)
           .eq('kitchen_status', 'waiting')
           .eq('sent_to_kitchen', false)
           .in('kitchen_confirmation', ['pending', 'rejected'])
-          .select()
-          .single()
+          .select('id')
       );
+
+      if (!Array.isArray(removidos) || removidos.length === 0) {
+        throw new Error(
+          'Nenhum registro foi removido. Verifique se o produto ainda existe e se a política de segurança permite sua exclusão.'
+        );
+      }
+
+      return removidos[0];
     },
 
     async enviarItensComanda(orderId) {
