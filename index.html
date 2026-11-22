@@ -990,7 +990,6 @@ function renderDetalhes() {
         ` : `
           <button class="btn btn-primary"
             style="width:100%;margin-top:13px"
-            ${rascunhos.length ? 'disabled title="Envie os rascunhos antes de fechar"' : ''}
             onclick="abrirFechamento()">Fechar comanda</button>
           ${rascunhos.length ? `
             <small style="display:block;margin-top:7px">
@@ -1171,69 +1170,120 @@ async function removerItem(index) {
   }
 }
 
-function abrirFechamento() {
-  const c = comandas.find(x => x.id === comandaAtualId);
+async function abrirFechamento() {
+  try {
+    // Busca os dados mais recentes diretamente do Supabase.
+    const lista = await CutiaDB.comandasTodas();
+    const registro = lista.find(x => x.id === comandaAtualId);
 
-  if (!c || !c.itens.length) {
-    toast('Adicione pelo menos um produto antes de fechar.');
-    return;
+    if (!registro) {
+      toast('Não foi possível localizar esta comanda.');
+      return;
+    }
+
+    const c = converterComanda(registro);
+    const indice = comandas.findIndex(x => x.id === c.id);
+
+    if (indice >= 0) comandas[indice] = c;
+    else comandas.push(c);
+
+    if (c.status !== 'open') {
+      toast('Esta comanda não está aberta.');
+      return;
+    }
+
+    if (!c.itens.length) {
+      toast('Esta comanda realmente não possui produtos registrados.');
+      abrirDetalhes(c.id);
+      return;
+    }
+
+    if (c.itens.some(item => !item.enviadoCozinha)) {
+      toast('Envie todos os produtos à cozinha antes de fechar.');
+      abrirDetalhes(c.id);
+      return;
+    }
+
+    const total = totalComanda(c);
+
+    document.getElementById('modal-title').textContent = 'Fechar comanda';
+    document.getElementById('modal-content').innerHTML = `
+      <div class="panel">
+        <div class="eyebrow">Confirmar recebimento</div>
+        <div class="detail-total">${moeda(total)}</div>
+        <div class="field">
+          <label>Forma de pagamento</label>
+          <select id="payment-method">
+            <option value="Dinheiro">Dinheiro</option>
+            <option value="Pix">Pix</option>
+            <option value="Cartão de débito">Cartão de débito</option>
+            <option value="Cartão de crédito">Cartão de crédito</option>
+          </select>
+        </div>
+        <p class="subtitle" style="line-height:1.7;margin-top:14px">
+          Ao confirmar, a comanda será marcada como fechada.
+        </p>
+        <div class="modal-actions">
+          <button class="btn btn-primary" onclick="confirmarFechamento()">
+            Confirmar recebimento
+          </button>
+          <button class="btn btn-secondary" onclick="abrirDetalhes('${escapar(c.id)}')">
+            Voltar
+          </button>
+        </div>
+      </div>`;
+  } catch (error) {
+    console.error('Erro ao atualizar comanda para fechamento:', error);
+    toast('Erro ao consultar os produtos: ' + (error.message || error));
   }
-
-  if (c.itens.some(item => !item.enviadoCozinha)) {
-    toast('Envie todos os produtos à cozinha antes de fechar a comanda.');
-    return;
-  }
-
-  const total = totalComanda(c);
-
-  document.getElementById('modal-title').textContent = 'Fechar comanda';
-  document.getElementById('modal-content').innerHTML = `
-    <div class="panel">
-      <div class="eyebrow">Confirmar recebimento</div>
-      <div class="detail-total">${moeda(total)}</div>
-      <div class="field">
-        <label>Forma de pagamento</label>
-        <select id="payment-method">
-          <option value="Dinheiro">Dinheiro</option>
-          <option value="Pix">Pix</option>
-          <option value="Cartão de débito">Cartão de débito</option>
-          <option value="Cartão de crédito">Cartão de crédito</option>
-        </select>
-      </div>
-      <p class="subtitle" style="line-height:1.7;margin-top:14px">
-        Ao confirmar, a comanda será marcada como fechada.
-      </p>
-      <div class="modal-actions">
-        <button class="btn btn-primary" onclick="confirmarFechamento()">
-          Confirmar recebimento
-        </button>
-        <button class="btn btn-secondary" onclick="abrirDetalhes('${escapar(c.id)}')">
-          Voltar
-        </button>
-      </div>
-    </div>`;
 }
 
 async function confirmarFechamento() {
-  const c = comandas.find(x => x.id === comandaAtualId);
-  if (!c || c.status !== 'open') return;
-
-  if (c.itens.some(item => !item.enviadoCozinha)) {
-    toast('Envie todos os produtos à cozinha antes de fechar.');
-    abrirDetalhes(c.id);
-    return;
-  }
-
-  const metodo = document.getElementById('payment-method')?.value;
-  if (!metodo) return;
-
   try {
-    await CutiaDB.fecharComanda(c.id, totalComanda(c), metodo);
+    // Confere novamente os produtos antes de registrar o pagamento.
+    const lista = await CutiaDB.comandasTodas();
+    const registro = lista.find(x => x.id === comandaAtualId);
+
+    if (!registro) {
+      toast('Comanda não encontrada no banco de dados.');
+      return;
+    }
+
+    const c = converterComanda(registro);
+
+    if (c.status !== 'open') {
+      toast('Esta comanda não está aberta.');
+      return;
+    }
+
+    if (!c.itens.length) {
+      toast('Nenhum produto foi encontrado nesta comanda.');
+      abrirDetalhes(c.id);
+      return;
+    }
+
+    if (c.itens.some(item => !item.enviadoCozinha)) {
+      toast('Envie todos os produtos à cozinha antes de fechar.');
+      abrirDetalhes(c.id);
+      return;
+    }
+
+    const metodo = document.getElementById('payment-method')?.value;
+    if (!metodo) {
+      toast('Selecione a forma de pagamento.');
+      return;
+    }
+
+    const total = totalComanda(c);
+
+    await CutiaDB.fecharComanda(c.id, total, metodo);
+
     await carregarDados(false);
     toast('Comanda fechada e pagamento registrado!');
     abrirDetalhes(c.id);
+
   } catch (error) {
-    console.error(error);
+    console.error('Erro ao fechar comanda:', error);
     toast('Erro ao fechar comanda: ' + (error.message || error));
   }
 }
