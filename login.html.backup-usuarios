@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#100d0b">
+<title>Cutia Paradise | Acesso</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#100d0b;--gold:#f4b544;--orange:#f17c32;
+  --cream:#fff4dc;--muted:#b7a997;--red:#f07868;
+  --line:rgba(255,244,220,.09);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;min-height:100vh;padding:20px;display:grid;place-items:center;
+  color:var(--cream);font-family:'DM Sans',sans-serif;
+  background:radial-gradient(ellipse at 85% 0%,#f17c3220,transparent 40%),
+  radial-gradient(ellipse at 0% 100%,#f4b54412,transparent 40%),var(--bg);
+}
+.login{
+  width:100%;max-width:420px;padding:30px;
+  background:linear-gradient(145deg,#211a14,#18130f);
+  border:1px solid var(--line);border-radius:22px;
+  box-shadow:0 25px 80px #0007;
+}
+.logo{
+  width:58px;height:58px;border-radius:17px;display:grid;
+  place-items:center;margin-bottom:22px;
+  background:linear-gradient(135deg,var(--gold),var(--orange));
+  color:#25160a;font-size:30px;font-weight:900;
+}
+.eyebrow{color:var(--gold);font-size:10px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase}
+h1{font-family:'Barlow Condensed',sans-serif;font-size:38px;text-transform:uppercase;margin:7px 0 5px}
+.subtitle{color:var(--muted);font-size:13px;line-height:1.6;margin:0 0 25px}
+label{display:block;font-size:11px;font-weight:700;margin:16px 0 8px}
+input{
+  width:100%;padding:14px;border:1px solid var(--line);
+  border-radius:11px;background:#100d0b;color:var(--cream);
+  font:inherit;font-size:14px;outline:none;
+}
+input:focus{border-color:var(--gold)}
+button{
+  width:100%;margin-top:22px;padding:14px;border:0;border-radius:11px;
+  background:linear-gradient(135deg,var(--gold),var(--orange));
+  color:#271708;font:inherit;font-weight:900;cursor:pointer;
+}
+button:disabled{opacity:.6;cursor:wait}
+.message{display:none;margin-top:16px;padding:12px;border-radius:10px;font-size:12px;line-height:1.5}
+.message.error{display:block;color:var(--red);background:#f0786815}
+.message.success{display:block;color:#67c58a;background:#67c58a15}
+.footer{text-align:center;color:#766b5e;font-size:10px;margin-top:24px}
+</style>
+</head>
+
+<body>
+<main class="login">
+  <div class="logo">C</div>
+  <div class="eyebrow">Área restrita</div>
+  <h1>Cutia Paradise</h1>
+  <p class="subtitle">Entre com seu usuário para acessar o painel de atendimento ou produção.</p>
+
+  <form id="login-form">
+    <label for="username">Usuário</label>
+    <input id="username" type="text" autocomplete="username"
+      placeholder="Digite seu usuário" required>
+
+    <label for="password">Senha</label>
+    <input id="password" type="password" autocomplete="current-password"
+      placeholder="Sua senha" required>
+
+    <button id="submit-button" type="submit">Entrar no sistema</button>
+  </form>
+
+  <div id="message" class="message" role="alert"></div>
+  <div class="footer">CUTIA PARADISE · SISTEMA DE ATENDIMENTO</div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+
+<script>
+const client=window.supabase.createClient(
+  window.CUTIA_CONFIG.url,
+  window.CUTIA_CONFIG.key
+);
+
+const usuarios={
+  'garçom':'soypedro148@gmail.com',
+  'cozinha':'pedrovictor1650@gmail.com'
+};
+
+const form=document.getElementById('login-form');
+const button=document.getElementById('submit-button');
+const message=document.getElementById('message');
+
+function avisar(texto,tipo='error'){
+  message.textContent=texto;
+  message.className='message '+tipo;
+}
+
+function destino(role){
+  if(role==='kitchen')return 'cozinha.html';
+  if(role==='waiter'||role==='admin')return 'index.html';
+  return null;
+}
+
+async function verificarPerfil(user){
+  const {data,error}=await client.from('profiles')
+    .select('role').eq('id',user.id).maybeSingle();
+
+  if(error)throw error;
+  if(!data||!data.role)throw new Error('Perfil de acesso não encontrado.');
+
+  const pagina=destino(data.role);
+  if(!pagina)throw new Error('Seu perfil não possui acesso aos painéis.');
+
+  return pagina;
+}
+
+form.addEventListener('submit',async(event)=>{
+  event.preventDefault();
+
+  button.disabled=true;
+  button.textContent='Verificando acesso...';
+  message.className='message';
+
+  try{
+    const usuario=document.getElementById('username').value
+      .trim().toLocaleLowerCase('pt-BR');
+    const password=document.getElementById('password').value;
+    const email=usuarios[usuario];
+
+    if(!email)throw new Error('Usuário inválido. Use garçom ou cozinha.');
+
+    const {data,error}=await client.auth.signInWithPassword({
+      email,password
+    });
+
+    if(error)throw error;
+
+    const pagina=await verificarPerfil(data.user);
+
+    if(
+      (usuario==='garçom'&&pagina!=='index.html')||
+      (usuario==='cozinha'&&pagina!=='cozinha.html')
+    ){
+      throw new Error('Este usuário não corresponde ao perfil autorizado.');
+    }
+
+    avisar('Acesso autorizado. Abrindo painel...','success');
+    window.location.replace(pagina);
+
+  }catch(error){
+    await client.auth.signOut().catch(()=>{});
+    avisar(error.message||'Não foi possível entrar.');
+    button.disabled=false;
+    button.textContent='Entrar no sistema';
+  }
+});
+
+async function iniciar(){
+  try{
+    const {data}=await client.auth.getSession();
+
+    if(data.session){
+      const pagina=await verificarPerfil(data.session.user);
+      window.location.replace(pagina);
+    }
+  }catch(error){
+    await client.auth.signOut().catch(()=>{});
+  }
+}
+
+iniciar();
+</script>
+</body>
+</html>
