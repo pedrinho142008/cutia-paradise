@@ -1278,12 +1278,6 @@ async function abrirFechamento() {
       return;
     }
 
-    if (c.itens.some(item => !item.enviadoCozinha)) {
-      toast('Envie todos os produtos à cozinha antes de fechar.');
-      abrirDetalhes(c.id);
-      return;
-    }
-
     const total = totalComanda(c);
 
     document.getElementById('modal-title').textContent = 'Fechar comanda';
@@ -1338,12 +1332,6 @@ async function confirmarFechamento() {
 
     if (!c.itens.length) {
       toast('Nenhum produto foi encontrado nesta comanda.');
-      abrirDetalhes(c.id);
-      return;
-    }
-
-    if (c.itens.some(item => !item.enviadoCozinha)) {
-      toast('Envie todos os produtos à cozinha antes de fechar.');
       abrirDetalhes(c.id);
       return;
     }
