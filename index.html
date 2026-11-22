@@ -501,6 +501,7 @@ let produtos = [];
 let comandas = [];
 let filtroAtual = 'all';
 let comandaAtualId = null;
+let criandoComanda = false;
 let categoriaAtual = 'Todas';
 let buscaProduto = '';
 let canalPedidos = null;
@@ -674,9 +675,17 @@ function novaComanda() {
 }
 
 async function criarComanda() {
+  if (criandoComanda) {
+    toast('Aguarde, a criação da comanda está em andamento.');
+    return;
+  }
+
   const tipo = document.getElementById('command-type').value;
   const identificacao = document.getElementById('command-number').value.trim();
   const cliente = document.getElementById('command-person').value.trim();
+  const botao = document.querySelector(
+    'button[onclick="criarComanda()"]'
+  );
 
   if (!identificacao) {
     toast('Informe o número ou identificação.');
@@ -684,30 +693,65 @@ async function criarComanda() {
     return;
   }
 
-  const repetida = comandas.some(c =>
-    c.status === 'open' &&
-    c.tipo === tipo &&
-    c.identificacao.toLowerCase() === identificacao.toLowerCase()
-  );
+  const normalizar = valor => String(valor || '')
+    .trim()
+    .toLocaleLowerCase('pt-BR');
 
-  if (repetida) {
-    toast('Já existe uma comanda aberta para essa identificação.');
-    return;
+  criandoComanda = true;
+
+  if (botao) {
+    botao.disabled = true;
+    botao.textContent = 'Criando comanda...';
   }
 
   try {
+    // Consulta o banco antes de criar, evitando depender da lista local.
+    const atuais = await CutiaDB.comandasTodas();
+
+    const repetida = atuais.some(c =>
+      c.command_status === 'open' &&
+      c.command_type === tipo &&
+      normalizar(c.identification || c.table_number) === normalizar(identificacao)
+    );
+
+    if (repetida) {
+      comandas = atuais.map(converterComanda);
+      renderComandas();
+      toast('Já existe uma comanda aberta para essa identificação.');
+      return;
+    }
+
     const criada = await CutiaDB.criarComanda({
       tipo,
       identificacao,
       cliente
     });
 
-    await carregarDados(false);
+    // Atualiza a lista diretamente, sem depender de carregarDados().
+    const atualizadas = await CutiaDB.comandasTodas();
+    comandas = atualizadas.map(converterComanda);
+
+    renderComandas();
+
+    const encontrada = comandas.find(c => c.id === criada.id);
+
+    if (!encontrada) {
+      throw new Error('A comanda foi criada, mas não apareceu na consulta. Atualize a página.');
+    }
+
     toast('Comanda criada! Adicione os produtos.');
     abrirDetalhes(criada.id);
+
   } catch (error) {
-    console.error(error);
+    console.error('Erro ao criar comanda:', error);
     toast('Erro ao criar comanda: ' + (error.message || error));
+  } finally {
+    criandoComanda = false;
+
+    if (botao) {
+      botao.disabled = false;
+      botao.textContent = 'Criar comanda';
+    }
   }
 }
 
