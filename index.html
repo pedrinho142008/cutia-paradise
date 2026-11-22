@@ -1141,10 +1141,33 @@ async function enviarPedidoCozinha() {
   const c = comandas.find(x => x.id === comandaAtualId);
   if (!c || c.status !== 'open') return;
 
-  const rascunhos = c.itens.filter(item => !item.enviadoCozinha);
+  const normalizarCategoria = valor => String(valor || '')
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, ' e ')
+    .replace(/\\s+/g, ' ')
+    .trim();
+
+  const categoriasCozinha = new Set([
+    'doses',
+    'drinks',
+    'sucos naturais',
+    'petiscos',
+    'refeicoes',
+    'caldos',
+    'entradas e porcoes',
+    'entrada e porcoes'
+  ]);
+
+  const rascunhos = c.itens.filter(item =>
+    !item.enviadoCozinha &&
+    item.kitchenStatus === 'waiting' &&
+    categoriasCozinha.has(normalizarCategoria(item.categoria))
+  );
 
   if (!rascunhos.length) {
-    toast('Não há produtos aguardando envio.');
+    toast('Não há produtos destinados à cozinha aguardando envio.');
     return;
   }
 
@@ -1153,9 +1176,15 @@ async function enviarPedidoCozinha() {
   )) return;
 
   try {
-    await CutiaDB.enviarItensComanda(c.id);
+    const enviados = await CutiaDB.enviarItensComanda(c.id);
+
+    if (!enviados || enviados.length === 0) {
+      toast('Não há novos produtos destinados à cozinha para enviar.');
+      return;
+    }
+
     await carregarDados();
-    toast('Pedido enviado à cozinha!');
+    toast(`${enviados.length} ${enviados.length === 1 ? 'produto enviado' : 'produtos enviados'} à cozinha!`);
   } catch (error) {
     console.error(error);
     toast('Erro ao enviar pedido: ' + (error.message || error));

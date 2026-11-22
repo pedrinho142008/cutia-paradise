@@ -221,9 +221,7 @@
         .map(item => item.id);
 
       if (!idsPermitidos.length) {
-        throw new Error(
-          'Não há produtos das categorias permitidas aguardando envio à cozinha.'
-        );
+        return [];
       }
 
       return executar(
