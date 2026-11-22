@@ -1124,7 +1124,14 @@ async function adicionarProduto(index) {
     await carregarDados();
     toast(`${p.nome} adicionado.`);
   } catch (error) {
-    console.error(error);
+    console.error('[CUTIA RLS] Erro completo:', {
+      message: error?.message,
+      code: error?.code,
+      details: error?.details,
+      hint: error?.hint,
+      error
+    });
+
     toast('Erro ao adicionar produto: ' + (error.message || error));
   }
 }
